@@ -1,0 +1,53 @@
+name: Deploy backend API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install & test
+        working-directory: backend
+        run: |
+          npm ci
+          npm test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test-only-secret-value-123456
+
+      - name: Check deployment secrets
+        id: check
+        run: |
+          if [ -z "${{ secrets.BACKEND_DEPLOY_HOOK }}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::BACKEND_DEPLOY_HOOK is not configured — build verified, deployment skipped."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger hosting deploy hook (Render / Railway / Fly)
+        if: steps.check.outputs.configured == 'true'
+        run: curl -fsS -X POST "$BACKEND_DEPLOY_HOOK"
+        env:
+          BACKEND_DEPLOY_HOOK: ${{ secrets.BACKEND_DEPLOY_HOOK }}
+
+      - name: Health check after deploy
+        if: steps.check.outputs.configured == 'true'
+        continue-on-error: true
+        run: |
+          sleep 45
+          curl -fsS "${{ secrets.BACKEND_HEALTH_URL }}/api/health"

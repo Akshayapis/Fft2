@@ -1,0 +1,19 @@
+{
+  "name": "fire-arena-tournament-platform",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Production-ready Free Fire tournament platform: player app, separate admin console, shared secure backend and Firebase configuration.",
+  "type": "module",
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix user-app install && npm --prefix admin-app install",
+    "dev": "node scripts/dev.mjs",
+    "test": "npm --prefix backend test",
+    "build": "npm --prefix user-app run build && npm --prefix admin-app run build",
+    "smoke": "node scripts/smoke-test.mjs",
+    "package": "bash scripts/package.sh",
+    "seed": "npm --prefix backend run seed"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

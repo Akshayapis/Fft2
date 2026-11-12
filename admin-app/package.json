@@ -1,0 +1,21 @@
+{
+  "name": "ff-arena-admin-app",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Separate administrative console for the Fire Arena tournament platform.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5174",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 5174"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.2"
+  }
+}

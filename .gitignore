@@ -1,0 +1,27 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+npm-debug.log*
+
+# local data / secrets
+backend/data/
+.env
+.env.local
+.env.*.local
+*.pem
+serviceAccount*.json
+firebase/functions/node_modules/
+firebase/functions/lib/
+.firebase/
+firebase-debug.log
+
+# generated packages
+*.zip
+artifacts/
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
