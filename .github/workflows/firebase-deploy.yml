@@ -1,0 +1,55 @@
+name: Deploy Firebase (rules, indexes, functions, hosting)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'firebase/**'
+      - 'user-app/**'
+      - 'admin-app/**'
+      - '.github/workflows/firebase-deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check Firebase credentials
+        id: check
+        run: |
+          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::FIREBASE_SERVICE_ACCOUNT is not configured — Firebase deployment skipped."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write service account
+        if: steps.check.outputs.configured == 'true'
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/firebase-sa.json"
+
+      - name: Install dependencies
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          npm --prefix firebase/functions ci
+          npm --prefix user-app ci
+          npm --prefix admin-app ci
+
+      - name: Build both frontends
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          npm --prefix user-app run build
+          npm --prefix admin-app run build
+
+      - name: Deploy rules, indexes, functions and hosting
+        if: steps.check.outputs.configured == 'true'
+        run: npx firebase-tools@latest deploy --project "$FIREBASE_PROJECT" --non-interactive
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+          FIREBASE_PROJECT: ${{ secrets.FIREBASE_PROJECT_ID }}

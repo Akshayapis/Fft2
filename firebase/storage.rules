@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// Fire Arena — Cloud Storage rules.
+// Avatars: a user may write only inside their own folder, images only, max 5 MB.
+// Tournament banners: admin claim required.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    match /avatars/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && isImage()
+        && request.resource.size < 5 * 1024 * 1024;
+    }
+
+    match /banners/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin() && isImage() && request.resource.size < 8 * 1024 * 1024;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,166 @@
+rules_version = '2';
+
+// Fire Arena — Firestore security rules.
+//
+// Golden rules enforced here:
+//  * Clients can never write wallets, balances, payouts, results, approvals or roles.
+//  * All financial mutations happen in Cloud Functions with the Admin SDK.
+//  * Private match credentials live in matchPrivate/{matchId} and are only readable
+//    by registered participants (or admins).
+//  * Admin access is derived from a custom claim set server-side, never from a field
+//    the client can edit.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isParticipant(matchId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/matches/$(matchId)/participants/$(request.auth.uid));
+    }
+
+    function unchanged(field) {
+      return !(field in request.resource.data)
+        || request.resource.data[field] == resource.data[field];
+    }
+
+    // ---------------------------------------------------------------- users
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      // Profile fields only. Wallet, role, ban state, stats are server-owned.
+      allow update: if (isOwner(uid) || isAdmin())
+        && unchanged('role')
+        && unchanged('banned')
+        && unchanged('wallet')
+        && unchanged('stats')
+        && unchanged('email')
+        && unchanged('createdAt');
+
+      allow create, delete: if false;
+
+      match /devices/{deviceId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if false; // device registration is backend-only
+      }
+
+      match /sessions/{sessionId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if false;
+      }
+    }
+
+    // -------------------------------------------------------------- matches
+    match /matches/{matchId} {
+      allow read: if signedIn();
+      allow write: if false; // admin console writes through Cloud Functions
+
+      match /participants/{uid} {
+        allow read: if signedIn();
+        allow write: if false;
+      }
+
+      match /activity/{activityId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+
+    // Private room credentials: only registered players and admins.
+    match /matchPrivate/{matchId} {
+      allow read: if isParticipant(matchId) || isAdmin();
+      allow write: if false;
+    }
+
+    // --------------------------------------------------------------- wallet
+    match /wallets/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
+    match /transactions/{txId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow write: if false; // append-only ledger, server only
+    }
+
+    // ------------------------------------------------------ money requests
+    match /deposits/{depositId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0;
+      allow update, delete: if false;
+    }
+
+    match /withdrawals/{withdrawalId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if false; // created by the requestWithdrawal function (holds funds)
+      allow update, delete: if false;
+    }
+
+    match /prizeDistributions/{distributionId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid in resource.data.winnerIds);
+      allow write: if false;
+    }
+
+    // -------------------------------------------------------- notifications
+    match /notifications/{notificationId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      allow create, delete: if false;
+    }
+
+    match /supportTickets/{ticketId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'open';
+      allow update: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replies', 'updatedAt', 'status']));
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------- security
+    match /securityEvents/{eventId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /jobRuns/{runId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // --------------------------------------------------------------- config
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if false; // admin console updates through a protected function
+    }
+
+    match /leaderboards/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Default: deny everything else.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

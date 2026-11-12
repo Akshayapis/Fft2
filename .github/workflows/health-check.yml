@@ -1,0 +1,35 @@
+name: Scheduled health checks
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check backend health endpoint
+        run: |
+          if [ -z "${{ secrets.BACKEND_HEALTH_URL }}" ]; then
+            echo "::warning::BACKEND_HEALTH_URL is not configured — health check skipped."
+            exit 0
+          fi
+          echo "Checking ${{ secrets.BACKEND_HEALTH_URL }}/api/health"
+          for i in 1 2 3; do
+            if curl -fsS --max-time 20 "${{ secrets.BACKEND_HEALTH_URL }}/api/health" | tee /tmp/health.json; then
+              echo "Health check passed."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Backend health check failed after 3 attempts."
+          exit 1
+
+      - name: Check user app
+        if: ${{ secrets.USER_APP_URL != '' }}
+        run: curl -fsS --max-time 20 -o /dev/null -w "%{http_code}\n" "${{ secrets.USER_APP_URL }}"
+
+      - name: Check admin app
+        if: ${{ secrets.ADMIN_APP_URL != '' }}
+        run: curl -fsS --max-time 20 -o /dev/null -w "%{http_code}\n" "${{ secrets.ADMIN_APP_URL }}"

@@ -1,0 +1,54 @@
+name: Deploy user app (Vercel)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'user-app/**'
+      - '.github/workflows/deploy-user.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: user-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check deployment secrets
+        id: check
+        run: |
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ] || [ -z "${{ secrets.VERCEL_PROJECT_ID_USER }}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::VERCEL_TOKEN / VERCEL_PROJECT_ID_USER are not configured — skipping deployment."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.configured == 'true'
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: user-app/package-lock.json
+
+      - name: Install dependencies
+        if: steps.check.outputs.configured == 'true'
+        run: npm ci
+
+      - name: Build
+        if: steps.check.outputs.configured == 'true'
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.USER_APP_API_URL }}
+
+      - name: Deploy to Vercel
+        if: steps.check.outputs.configured == 'true'
+        run: npx vercel@latest deploy --prod --yes --token="$VERCEL_TOKEN" --scope="$VERCEL_SCOPE"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_USER }}
+          VERCEL_SCOPE: ${{ secrets.VERCEL_SCOPE }}
