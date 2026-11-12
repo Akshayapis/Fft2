@@ -25,3 +25,6 @@ artifacts/
 Thumbs.db
 .idea/
 .vscode/
+
+# delivered archive (allowed as an explicit deliverable)
+!deliverables/*.zip
